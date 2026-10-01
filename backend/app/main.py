@@ -1,3 +1,4 @@
+import os
 """FastAPI application factory."""
 
 import logging
