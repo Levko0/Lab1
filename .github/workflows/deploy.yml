@@ -16,6 +16,8 @@ jobs:
       PROJECT_NAME: successfulsuccess
       AWS_LAMBDA_ARCH: arm64
       AWS_DB_PASSWORD: ${{ secrets.AWS_DB_PASSWORD }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -26,3 +28,4 @@ jobs:
           aws-region: us-east-1
       - run: make aws-deploy-backend
       - run: make aws-deploy-frontend
+
