@@ -157,10 +157,15 @@ aws-deploy: ## Deploy everything: sign-in, then the backend, then the frontend b
 
 aws-deploy-auth: ## Create/update the Cognito user pool (email + password; Google when GOOGLE_CLIENT_ID is set)
 	$(require-aws-credentials)
-	@urls="http://localhost:$(or $(FRONTEND_PORT),3000)/"; \
+	@cb="http://localhost:$(or $(FRONTEND_PORT),3000)/auth/callback/"; \
+		lo="http://localhost:$(or $(FRONTEND_PORT),3000)/auth/callback/"; \
 		site=$$($(call stack-output,$(FRONTEND_STACK),AllowedOrigins) 2>/dev/null | tr -d '[:space:]'); \
-		case "$$site" in ""|None) ;; *) urls="$$urls,$$(echo "$$site" | sed 's|,|/,|g')/" ;; esac; \
-		echo "Sign-in redirect URLs: $$urls"; \
+		case "$$site" in ""|None) ;; *) \
+			cb="$$cb,$$(echo "$$site" | sed 's|,|/auth/callback/,|g')/auth/callback/"; \
+			lo="$$lo,$$(echo "$$site" | sed 's|,|/auth/callback/,|g')/auth/callback/"; \
+		;; esac; \
+		echo "Callback URLs: $$cb"; \
+		echo "Logout  URLs:  $$lo"; \
 		test -n "$(GOOGLE_CLIENT_ID)" || echo "GOOGLE_CLIENT_ID is empty — Google sign-in stays off"; \
 		$(call wait-stack-idle,$(AUTH_STACK)); \
 		$(call clear-failed-create,$(AUTH_STACK)); \
@@ -171,7 +176,8 @@ aws-deploy-auth: ## Create/update the Cognito user pool (email + password; Googl
 			$(STACK_TAGS) \
 			--parameter-overrides \
 				"ProjectName=$(PROJECT_NAME)" \
-				"AppUrls=$$urls" \
+				"CallbackUrls=$$cb" \
+				"LogoutUrls=$$lo" \
 				"GoogleClientId=$(GOOGLE_CLIENT_ID)" \
 				"GoogleClientSecret=$(GOOGLE_CLIENT_SECRET)"
 	@if [ -n "$(GOOGLE_CLIENT_ID)" ]; then \
@@ -324,7 +330,6 @@ aws-deploy-frontend: ## Deploy the frontend to S3 + CloudFront, built against th
 			--build-arg NEXT_PUBLIC_COGNITO_USER_POOL_ID="$$(auth_out UserPoolId)" \
 			--build-arg NEXT_PUBLIC_COGNITO_CLIENT_ID="$$(auth_out UserPoolClientId)" \
 			--build-arg NEXT_PUBLIC_COGNITO_DOMAIN="$$(auth_out HostedDomain)" \
-			--build-arg NEXT_PUBLIC_COGNITO_GOOGLE_ENABLED="$$(auth_out GoogleEnabled)" \
 			./frontend || exit 1; \
 		echo "Uploading to s3://$$bucket"; \
 		$(AWS) s3 sync frontend/out "s3://$$bucket" --delete --exclude "*.html" \

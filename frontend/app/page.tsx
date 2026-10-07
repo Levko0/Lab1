@@ -1,9 +1,16 @@
-import { AuthPage } from "@/components/auth-page";
+"use client"
 
-export const metadata = {
-  title: "Log in — SuccessfulSuccess",
-};
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
+/**
+ * Root page: immediately redirects to the login entry-point.
+ * Client-side replace() so the static export doesn't need a server redirect.
+ */
 export default function Home() {
-  return <AuthPage />;
+  const router = useRouter()
+  useEffect(() => {
+    router.replace("/login/")
+  }, [router])
+  return null
 }

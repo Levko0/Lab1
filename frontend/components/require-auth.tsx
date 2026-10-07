@@ -25,13 +25,16 @@ export function AuthLoading({ label = "Checking your session…" }: { label?: st
   )
 }
 
-/** Renders its children only for a signed-in user; everyone else goes to the login page. */
+/** Renders its children only for a signed-in user; everyone else goes to /login/. */
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === "signedOut") router.replace("/")
+    // Wait until the OIDC library has finished restoring the session before
+    // deciding to redirect — avoids a spurious redirect loop on hard refresh.
+    if (status === "loading") return
+    if (status === "signedOut") router.replace("/login/")
   }, [status, router])
 
   if (status !== "signedIn") {

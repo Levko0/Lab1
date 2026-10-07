@@ -1,6 +1,4 @@
-import { signOut } from "aws-amplify/auth"
-
-import { getAccessToken } from "@/lib/auth"
+import { getAccessToken, getIdToken, userManager } from "@/lib/auth"
 import type {
   ApiErrorBody,
   ApiErrorDetail,
@@ -35,6 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        // Access token for every API call (Bearer scheme).
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
@@ -44,10 +43,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, "network_error", "Could not reach the meetings API.", [])
   }
 
-  // The session is gone or was revoked: sign out, and the auth guard sends the
-  // user back to the login page.
+  // The session is gone or was revoked: remove the local OIDC session so the
+  // auth guard redirects the user back to /login/.
   if (response.status === 401) {
-    void signOut()
+    void userManager?.removeUser()
   }
 
   if (response.status === 204) {
@@ -104,10 +103,28 @@ export function getMe() {
   return request<UserProfile>("/api/v1/me")
 }
 
-/** Stores the profile from the ID token in the users table; call after signing in. */
-export function syncMe(idToken: string) {
-  return request<UserProfile>("/api/v1/me/sync", {
+/**
+ * Stores the profile from the ID token in the users table; call after signing in.
+ * Uses the ID token (not the access token) because the backend reads claims from it.
+ */
+export async function syncMe(idToken: string): Promise<UserProfile> {
+  // idToken is passed in directly by the caller (auth-provider.tsx reads it
+  // from oidc.user.id_token); we don't go through getAccessToken() here.
+  const accessToken = await getAccessToken()
+  const response = await fetch(`${API_BASE_URL}/api/v1/me/sync`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify({ id_token: idToken }),
+    cache: "no-store",
   })
+  if (!response.ok) {
+    throw new ApiError(response.status, "sync_error", "Profile sync failed.", [])
+  }
+  return response.json() as Promise<UserProfile>
 }
+
+// Re-export for any module that only needs the ID token (e.g. future use).
+export { getIdToken }

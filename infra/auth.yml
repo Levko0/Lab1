@@ -11,13 +11,19 @@ Parameters:
     Default: successfulsuccess
     Description: Prefix for the names of the resources in this stack.
 
-  AppUrls:
+  CallbackUrls:
     Type: CommaDelimitedList
-    Default: "http://localhost:3000/"
+    Default: "http://localhost:3000/auth/callback/"
     Description: >-
-      Every URL the site is served from, each ending in "/": Cognito sends
-      people back there after signing in with Google or signing out. Include
-      the local dev server and the CloudFront site.
+      OIDC redirect_uri values: every URL the app serves from, with /auth/callback/
+      appended, each ending in "/". Include the local dev server and the CloudFront site.
+
+  LogoutUrls:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000/auth/callback/"
+    Description: >-
+      Post-logout redirect URLs: where Cognito sends the user after sign-out.
+      Typically the same as CallbackUrls.
 
   GoogleClientId:
     Type: String
@@ -67,6 +73,9 @@ Resources:
       # before real traffic arrives.
       EmailConfiguration:
         EmailSendingAccount: COGNITO_DEFAULT
+      UserPoolTier: ESSENTIALS
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
       UserPoolTags:
         PROJECT_NAME: !Ref ProjectName
 
@@ -78,6 +87,7 @@ Resources:
       UserPoolId: !Ref UserPool
       # Domain prefixes are unique per region across all accounts.
       Domain: !Sub "${ProjectName}-${AWS::AccountId}"
+      ManagedLoginVersion: 2
 
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
@@ -124,8 +134,16 @@ Resources:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email, profile]
-      CallbackURLs: !Ref AppUrls
-      LogoutURLs: !Ref AppUrls
+      CallbackURLs: !Ref CallbackUrls
+      LogoutURLs: !Ref LogoutUrls
+
+  ManagedLoginBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref UserPoolClient
+      UseCognitoProvidedValues: true
 
 Outputs:
   UserPoolId:
