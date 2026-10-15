@@ -39,6 +39,7 @@ AUTH_STACK ?= $(PROJECT_NAME)-auth
 APP_STACK ?= $(PROJECT_NAME)-backend
 ECR_STACK ?= $(PROJECT_NAME)-ecr
 FRONTEND_STACK ?= $(PROJECT_NAME)-frontend
+REPORTS_STACK ?= $(PROJECT_NAME)-reports
 IMAGE_TAG ?= latest
 # x86_64 or arm64. arm64 is ~20% cheaper on Lambda and builds natively on
 # Apple Silicon; the image platform is derived from it so the two cannot drift.
@@ -94,7 +95,8 @@ endef
 
 .PHONY: help up up-build down down-v logs ps migrate revision seed test lint fmt shell-backend psql \
         aws-whoami aws-deploy aws-deploy-auth aws-auth-env aws-ecr aws-push aws-deploy-backend aws-migrate aws-url aws-status aws-logs \
-        aws-frontend-cert aws-deploy-frontend aws-frontend-url aws-destroy
+        aws-frontend-cert aws-deploy-frontend aws-frontend-url \
+        aws-deploy-reports report-now aws-reports-logs aws-destroy
 
 help:
 	@grep -hE '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -260,6 +262,7 @@ aws-deploy-backend: aws-push ## Deploy the backend to AWS (Lambda function URL +
 				"CognitoJwks=$$jwks"
 	@$(MAKE) --no-print-directory aws-migrate
 	@$(MAKE) --no-print-directory aws-url
+	@$(MAKE) --no-print-directory aws-deploy-reports
 
 aws-migrate: ## Apply database migrations (invokes the backend function directly)
 	@fn=$$($(call stack-output,$(APP_STACK),FunctionName) | tr -d '[:space:]'); \
@@ -282,6 +285,45 @@ aws-status: ## Show the stack outputs and the API function's state
 
 aws-logs: ## Follow the backend function logs
 	$(AWS) logs tail /aws/lambda/$(PROJECT_NAME)-backend --follow
+
+aws-deploy-reports:
+	$(require-aws-credentials)
+	$(require-db-password)
+	@vpc=$$($(AWS) ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text | tr -d '[:space:]'); \
+		subnets=$$($(AWS) ec2 describe-subnets --filters Name=vpc-id,Values=$$vpc Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text | tr '\t' ',' | tr ' ' ',' | sed 's/,*$$//'); \
+		routetables=$$($(AWS) ec2 describe-route-tables --filters Name=vpc-id,Values=$$vpc --query 'RouteTables[].RouteTableId' --output text | tr '\t' ',' | tr ' ' ',' | sed 's/,*$$//'); \
+		fn=$$($(call stack-output,$(APP_STACK),FunctionName) 2>/dev/null | tr -d '[:space:]'); \
+		sg=$$($(AWS) lambda get-function-configuration --function-name "$$fn" --query 'VpcConfig.SecurityGroupIds[0]' --output text | tr -d '[:space:]'); \
+		db_host=$$($(call stack-output,$(APP_STACK),DatabaseEndpoint) 2>/dev/null | tr -d '[:space:]'); \
+		case "$$db_host" in ""|None) db_host=$$($(call stack-output,$(APP_STACK),DbEndpoint) 2>/dev/null | tr -d '[:space:]') ;; esac; \
+		db_url="postgresql+asyncpg://app:$(AWS_DB_PASSWORD)@$$db_host:5432/meetings"; \
+		repo=$$($(call stack-output,$(ECR_STACK),RepositoryUri) | tr -d '[:space:]'); \
+		digest=$$($(AWS) ecr describe-images --repository-name "$${repo#*/}" --image-ids imageTag=$(IMAGE_TAG) --query 'imageDetails[0].imageDigest' --output text | tr -d '[:space:]'); \
+		echo "Deploying reports stack..."; \
+		$(call clear-failed-create,$(PROJECT_NAME)-reports); \
+		$(AWS) cloudformation deploy \
+			--stack-name $(PROJECT_NAME)-reports \
+			--template-file infra/reports.yml \
+			--capabilities CAPABILITY_IAM \
+			--no-fail-on-empty-changeset \
+			$(STACK_TAGS) \
+			--parameter-overrides \
+				"ProjectName=$(PROJECT_NAME)" \
+				"VpcId=$$vpc" \
+				"SubnetIds=$$subnets" \
+				"RouteTableIds=$$routetables" \
+				"SecurityGroupId=$$sg" \
+				"ImageUri=$$repo@$$digest" \
+				"Architecture=$(AWS_LAMBDA_ARCH)" \
+				"DatabaseUrl=$$db_url" \
+				"SenderEmail=$(SES_SENDER)" \
+				"RecipientEmails=$(SES_RECIPIENTS)"
+
+aws-reports-logs: ## Follow the report-builder and report-mailer logs
+	trap 'kill 0' EXIT INT TERM; \
+	$(AWS) logs tail /aws/lambda/$(PROJECT_NAME)-report-builder --follow & \
+	$(AWS) logs tail /aws/lambda/$(PROJECT_NAME)-report-mailer --follow & \
+	wait
 
 aws-frontend-cert: ## Request and validate the HTTPS certificate for AWS_FRONTEND_DOMAIN (in us-east-1)
 	$(require-aws-credentials)
@@ -373,3 +415,12 @@ aws-destroy: ## Delete every stack, including the database and its data
 	$(AWS) cloudformation delete-stack --stack-name $(ECR_STACK)
 	$(AWS) cloudformation wait stack-delete-complete --stack-name $(ECR_STACK)
 	@echo "All stacks deleted."
+
+WEEK ?= 2026-W40
+
+report-now:
+	@url=$$($(AWS) sqs get-queue-url --queue-name report-requests --query 'QueueUrl' --output text | tr -d '[:space:]'); \
+	echo "Sending message to $$url..."; \
+	$(AWS) sqs send-message \
+		--queue-url "$$url" \
+		--message-body '{"week": "$(WEEK)", "source": "manual"}'

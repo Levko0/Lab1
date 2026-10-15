@@ -342,3 +342,6 @@ Outputs:
     Value: !Ref ApiFunction
   LogGroupName:
     Value: !Ref LogGroup
+  FunctionSecurityGroupId:
+    Description: Security group attached to the backend function
+    Value: !Ref FunctionSecurityGroup
