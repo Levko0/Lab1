@@ -144,7 +144,6 @@ def test_agenda_parse_error_returns_422(mock_verifier):
 
 
 def test_bedrock_rate_limit_returns_429(mock_verifier):
-    dummy_req = MagicMock()
     dummy_resp = MagicMock()
     dummy_resp.status_code = 429
     dummy_resp.headers = {}

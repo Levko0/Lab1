@@ -168,7 +168,7 @@ def parse_agenda(
         total_usage = _sum_usage(usage1, retry_response.usage)
         retry_call = _find_tool_call(retry_response.content, "record_agenda")
         if retry_call is None:
-            raise AgendaParseError("Model did not call record_agenda tool on retry.")
+            raise AgendaParseError("Model did not call record_agenda tool on retry.") from None
         _, retry_input = retry_call
         try:
             parsed = ParsedAgenda.model_validate(retry_input)

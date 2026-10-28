@@ -39,7 +39,7 @@ def _parse_report(csv_bytes: bytes) -> tuple[dict[str, dict[str, str]], list[dic
             if top5_header is None:
                 top5_header = row
             else:
-                top5.append(dict(zip(top5_header, row)))
+                top5.append(dict(zip(top5_header, row, strict=False)))
 
     return summary, top5
 
