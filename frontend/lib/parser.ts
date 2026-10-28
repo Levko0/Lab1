@@ -1,4 +1,4 @@
-import { getIdToken } from "@/lib/auth"
+import { getAccessToken } from "@/lib/auth"
 import type { ParsedAgenda } from "@/lib/types"
 
 export const PARSER_URL = process.env.NEXT_PUBLIC_PARSER_URL ?? ""
@@ -13,7 +13,7 @@ export class AgendaParseError extends Error {
 export async function parseAgendaText({ text, signal }: { text: string; signal?: AbortSignal }) {
   if (text.length > 10000) throw new AgendaParseError("Text is too long", 413)
 
-  const idToken = await getIdToken()
+  const accessToken = await getAccessToken()
   const today = new Date().toISOString().split("T")[0]
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   const url = PARSER_URL || "http://localhost:8000/api/v1/ai/parse-agenda"
@@ -23,7 +23,7 @@ export async function parseAgendaText({ text, signal }: { text: string; signal?:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({ text, today, tz }),
       signal,

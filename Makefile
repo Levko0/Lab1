@@ -225,11 +225,20 @@ aws-auth-env: ## Print the Cognito settings to put in .env for local development
 aws-ecr: ## Create the ECR repository for the backend image
 	$(require-aws-credentials)
 	$(AWS) cloudformation deploy \
-		--stack-name $(ECR_STACK) \
-		--template-file infra/ecr.yml \
-		--no-fail-on-empty-changeset \
-		$(STACK_TAGS) \
-		--parameter-overrides "ProjectName=$(PROJECT_NAME)"
+            --stack-name $(AI_STACK) \
+            --template-file infra/ai.yml \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            $(STACK_TAGS) \
+            --parameter-overrides \
+                "ProjectName=$(PROJECT_NAME)" \
+                ImageUri="$$repo@$$digest" \
+                "Architecture=$(AWS_LAMBDA_ARCH)" \
+                "CognitoUserPoolId=$$pool" \
+                "CognitoClientId=$$client" \
+                "AllowedOrigins=$$cors" \
+                "ParserModel=$(or $(PARSER_MODEL),us.anthropic.claude-haiku-4-5-20251001-v1:0)" \
+                "BedrockRegion=$(or $(BEDROCK_REGION),us-east-1)"
 
 aws-push: aws-ecr ## Build the backend Lambda image and push it to ECR
 	$(require-aws-credentials)
