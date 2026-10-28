@@ -7,6 +7,42 @@ export type Participant = {
   position: number
 }
 
+export type AgendaItem = {
+  topic: string
+  owner: string | null
+  minutes: number | null
+}
+
+export type ActionItem = {
+  task: string
+  owner: string | null
+  due: string | null
+}
+
+export type MeetingAgenda = {
+  items: AgendaItem[]
+  action_items: ActionItem[]
+}
+
+export type AISuggestion = {
+  suggested: Record<string, unknown>
+  model: string
+  prompt_version: string
+}
+
+export type ParsedAgendaResponse = {
+  agenda: {
+    title: string | null
+    starts_at: string | null
+    duration_minutes: number | null
+    items: AgendaItem[]
+    action_items: ActionItem[]
+    language: string
+  }
+  model: string
+  prompt_version: string
+}
+
 export type Meeting = {
   id: string
   name: string
@@ -15,6 +51,8 @@ export type Meeting = {
   starts_at: string
   ends_at: string
   participants: Participant[]
+  agenda: MeetingAgenda | null
+  ai_suggestion: AISuggestion | null
   created_at: string
   updated_at: string
 }
@@ -39,6 +77,11 @@ export type MeetingCreateInput = {
   starts_at: string
   ends_at: string
   participants: ParticipantInput[]
+}
+
+export type MeetingAgendaUpdateInput = {
+  agenda: MeetingAgenda | null
+  ai_suggestion: AISuggestion | null
 }
 
 export type ApiErrorDetail = {
@@ -66,4 +109,14 @@ export type UserProfile = {
   created_at: string
   updated_at: string
   last_login_at: string | null
+}
+
+
+
+export interface ParsedAgenda {
+  title?: string;
+  starts_at?: string;
+  duration_minutes?: number;
+  items?: { topic: string; owner?: string | null; minutes?: number | null }[];
+  action_items?: { task: string; owner?: string | null; due?: string | null }[];
 }

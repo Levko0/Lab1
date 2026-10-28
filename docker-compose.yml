@@ -26,13 +26,15 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       RUN_MIGRATIONS_ON_START: ${RUN_MIGRATIONS_ON_START:-true}
-      # File events from a Windows (or some VM) bind mount never reach the
-      # container, so --reload polls instead — the backend twin of WATCHPACK_POLLING.
       WATCHFILES_FORCE_POLLING: "true"
-      # From `make aws-auth-env`; the API refuses meetings requests without them.
       COGNITO_REGION: ${AWS_REGION:-us-east-1}
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
       COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "${BACKEND_PORT:-8000}:8000"

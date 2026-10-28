@@ -9,7 +9,7 @@ from app.config import settings
 from app.models import Meeting
 from app.repositories.meeting import MeetingRepository
 from app.repositories.user import UserRepository
-from app.schemas import MeetingCreate
+from app.schemas import MeetingAgendaUpdate, MeetingCreate
 
 
 class MeetingNotFoundError(Exception):
@@ -66,6 +66,16 @@ class MeetingService:
     async def update(self, meeting_id: uuid.UUID, payload: MeetingCreate) -> Meeting:
         meeting = await self.get(meeting_id)
         return await self.repo.update(meeting, payload)
+
+    async def update_agenda(
+        self, meeting_id: uuid.UUID, payload: MeetingAgendaUpdate
+    ) -> Meeting:
+        meeting = await self.get(meeting_id)
+        agenda_data = payload.agenda.model_dump(mode="json") if payload.agenda else None
+        suggestion_data = (
+            payload.ai_suggestion.model_dump(mode="json") if payload.ai_suggestion else None
+        )
+        return await self.repo.update_agenda(meeting, agenda_data, suggestion_data)
 
     async def delete(self, meeting_id: uuid.UUID) -> None:
         if not await self.repo.delete(meeting_id):

@@ -3,7 +3,7 @@
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     run_migrations_on_start: bool = True
     version: str = Field(default="1.0.0")
+
+    # Bedrock Claude model settings
+    parser_model: str = Field(
+        default="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        validation_alias=AliasChoices("parser_model", "PARSER_MODEL"),
+    )
+    bedrock_region: str = Field(
+        default="us-east-1",
+        validation_alias=AliasChoices("bedrock_region", "BEDROCK_REGION", "aws_region", "AWS_REGION"),
+    )
 
     # Cognito user pool whose access tokens the API accepts. Empty pool id means
     # authentication is not configured, and every meetings request is refused.

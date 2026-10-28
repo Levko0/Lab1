@@ -1,7 +1,8 @@
 """Pydantic request/response models for the meetings API."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -40,6 +41,29 @@ class ParticipantRead(BaseModel):
     position: int
 
 
+class AgendaItemSchema(BaseModel):
+    topic: str = Field(min_length=1)
+    owner: str | None = None
+    minutes: int | None = Field(default=None, ge=1, le=480)
+
+
+class ActionItemSchema(BaseModel):
+    task: str = Field(min_length=1)
+    owner: str | None = None
+    due: date | None = None
+
+
+class MeetingAgenda(BaseModel):
+    items: list[AgendaItemSchema] = Field(default_factory=list)
+    action_items: list[ActionItemSchema] = Field(default_factory=list)
+
+
+class AISuggestion(BaseModel):
+    suggested: dict[str, Any]
+    model: str
+    prompt_version: str
+
+
 class MeetingCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
@@ -47,6 +71,8 @@ class MeetingCreate(BaseModel):
     starts_at: datetime
     ends_at: datetime
     participants: list[ParticipantCreate] = Field(default_factory=list)
+    agenda: MeetingAgenda | None = None
+    ai_suggestion: AISuggestion | None = None
 
     @field_validator("name")
     @classmethod
@@ -93,6 +119,11 @@ class MeetingCreate(BaseModel):
         return value
 
 
+class MeetingAgendaUpdate(BaseModel):
+    agenda: MeetingAgenda | None = None
+    ai_suggestion: AISuggestion | None = None
+
+
 class MeetingRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -103,6 +134,8 @@ class MeetingRead(BaseModel):
     starts_at: datetime
     ends_at: datetime
     participants: list[ParticipantRead]
+    agenda: MeetingAgenda | None = None
+    ai_suggestion: AISuggestion | None = None
     created_at: datetime
     updated_at: datetime
 

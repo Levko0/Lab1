@@ -1,15 +1,7 @@
 import { getAccessToken, getIdToken, userManager } from "@/lib/auth"
-import type {
-  ApiErrorBody,
-  ApiErrorDetail,
-  Meeting,
-  MeetingCreateInput,
-  MeetingList,
-  UserProfile,
-} from "@/lib/types"
+import type { ApiErrorBody, ApiErrorDetail, Meeting, MeetingCreateInput, MeetingList, UserProfile } from "@/lib/types"
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
 export class ApiError extends Error {
   readonly code: string
@@ -33,7 +25,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        // Access token for every API call (Bearer scheme).
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
@@ -43,8 +34,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, "network_error", "Could not reach the meetings API.", [])
   }
 
-  // The session is gone or was revoked: remove the local OIDC session so the
-  // auth guard redirects the user back to /login/.
   if (response.status === 401) {
     void userManager?.removeUser()
   }
@@ -74,7 +63,7 @@ export function listMeetings(params: { date?: string; q?: string } = {}) {
   if (params.date) search.set("date", params.date)
   if (params.q) search.set("q", params.q)
   const query = search.toString()
-  return request<MeetingList>(`/api/v1/meetings${query ? `?${query}` : ""}`)
+  return request<MeetingList>(`/api/v1/meetings${query ? "?" + query : ""}`)
 }
 
 export function getMeeting(id: string) {
@@ -82,17 +71,11 @@ export function getMeeting(id: string) {
 }
 
 export function createMeeting(payload: MeetingCreateInput) {
-  return request<Meeting>("/api/v1/meetings", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  })
+  return request<Meeting>("/api/v1/meetings", { method: "POST", body: JSON.stringify(payload) })
 }
 
 export function updateMeeting(id: string, payload: MeetingCreateInput) {
-  return request<Meeting>(`/api/v1/meetings/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  })
+  return request<Meeting>(`/api/v1/meetings/${id}`, { method: "PUT", body: JSON.stringify(payload) })
 }
 
 export function deleteMeeting(id: string) {
@@ -103,13 +86,7 @@ export function getMe() {
   return request<UserProfile>("/api/v1/me")
 }
 
-/**
- * Stores the profile from the ID token in the users table; call after signing in.
- * Uses the ID token (not the access token) because the backend reads claims from it.
- */
 export async function syncMe(idToken: string): Promise<UserProfile> {
-  // idToken is passed in directly by the caller (auth-provider.tsx reads it
-  // from oidc.user.id_token); we don't go through getAccessToken() here.
   const accessToken = await getAccessToken()
   const response = await fetch(`${API_BASE_URL}/api/v1/me/sync`, {
     method: "POST",
@@ -120,11 +97,20 @@ export async function syncMe(idToken: string): Promise<UserProfile> {
     body: JSON.stringify({ id_token: idToken }),
     cache: "no-store",
   })
-  if (!response.ok) {
-    throw new ApiError(response.status, "sync_error", "Profile sync failed.", [])
-  }
+  if (!response.ok) throw new ApiError(response.status, "sync_error", "Profile sync failed.", [])
   return response.json() as Promise<UserProfile>
 }
 
-// Re-export for any module that only needs the ID token (e.g. future use).
 export { getIdToken }
+
+export interface MeetingAgendaUpdatePayload {
+  agenda: { items: { topic: string; owner?: string | null; minutes?: number | null }[]; action_items: { task: string; owner?: string | null; due?: string | null }[] }
+  ai_suggestion?: { suggested: unknown; model: string; prompt_version: string }
+}
+
+export function updateMeetingAgenda(id: string, payload: MeetingAgendaUpdatePayload) {
+  return request<void>(`/api/v1/meetings/${id}/agenda`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}

@@ -40,6 +40,7 @@ APP_STACK ?= $(PROJECT_NAME)-backend
 ECR_STACK ?= $(PROJECT_NAME)-ecr
 FRONTEND_STACK ?= $(PROJECT_NAME)-frontend
 REPORTS_STACK ?= $(PROJECT_NAME)-reports
+AI_STACK ?= $(PROJECT_NAME)-ai
 IMAGE_TAG ?= latest
 # x86_64 or arm64. arm64 is ~20% cheaper on Lambda and builds natively on
 # Apple Silicon; the image platform is derived from it so the two cannot drift.
@@ -94,6 +95,8 @@ define require-db-password
 endef
 
 .PHONY: help up up-build down down-v logs ps migrate revision seed test lint fmt shell-backend psql \
+        llm-hello parse \
+        aws-deploy-ai \
         aws-whoami aws-deploy aws-deploy-auth aws-auth-env aws-ecr aws-push aws-deploy-backend aws-migrate aws-url aws-status aws-logs \
         aws-frontend-cert aws-deploy-frontend aws-frontend-url \
         aws-deploy-reports report-now aws-reports-logs aws-destroy
@@ -148,13 +151,37 @@ shell-backend: ## Open a shell in the backend container
 psql: ## Open psql against the application database
 	$(COMPOSE) exec db psql -U app -d meetings
 
+llm-hello: ## Ask Claude Haiku 4.5 via Bedrock what an ISO week is
+	$(COMPOSE) exec backend python -c '\
+from anthropic import AnthropicBedrock; \
+from app.config import settings; \
+client = AnthropicBedrock(aws_region=settings.bedrock_region); \
+res = client.messages.create( \
+    model=settings.parser_model, \
+    max_tokens=256, \
+    messages=[{"role": "user", "content": "In one sentence: what is an ISO week?"}], \
+); \
+text = "".join(b.text for b in res.content if hasattr(b, "text")); \
+print("Answer:", text); \
+print("Stop reason:", res.stop_reason); \
+print("Usage:", res.usage)'
+
+parse: ## Parse agenda text: make parse TEXT="..."
+	@test -n "$(TEXT)" || { echo 'Usage: make parse TEXT="..."'; exit 1; }
+	$(COMPOSE) exec backend python -c '\
+import sys; from datetime import date; from app.config import settings; from app.ai.agenda import parse_agenda; \
+agenda, usage = parse_agenda(sys.argv[1], date.today(), settings.tz); \
+print(agenda.model_dump_json(indent=2)); \
+print("Usage:", usage)' "$(TEXT)"
+
 aws-whoami: ## Verify the AWS credentials in .env
 	$(require-aws-credentials)
 	$(AWS) sts get-caller-identity
 
-aws-deploy: ## Deploy everything: sign-in, then the backend, then the frontend built against both
+aws-deploy: ## Deploy everything: sign-in, backend, AI parser, then frontend built against all
 	@$(MAKE) --no-print-directory aws-deploy-auth
 	@$(MAKE) --no-print-directory aws-deploy-backend
+	@$(MAKE) --no-print-directory aws-deploy-ai
 	@$(MAKE) --no-print-directory aws-deploy-frontend
 
 aws-deploy-auth: ## Create/update the Cognito user pool (email + password; Google when GOOGLE_CLIENT_ID is set)
@@ -264,6 +291,40 @@ aws-deploy-backend: aws-push ## Deploy the backend to AWS (Lambda function URL +
 	@$(MAKE) --no-print-directory aws-url
 	@$(MAKE) --no-print-directory aws-deploy-reports
 
+aws-deploy-ai: aws-push ## Deploy the agenda parser Lambda function URL to AWS
+	$(require-aws-credentials)
+	@pool=$$($(call stack-output,$(AUTH_STACK),UserPoolId) 2>/dev/null | tr -d '[:space:]'); \
+		client=$$($(call stack-output,$(AUTH_STACK),UserPoolClientId) | tr -d '[:space:]'); \
+		case "$$pool" in ""|None) echo "No user pool found — run: make aws-deploy-auth"; exit 1 ;; esac; \
+		repo=$$($(call stack-output,$(ECR_STACK),RepositoryUri) | tr -d '[:space:]'); \
+		digest=$$($(AWS) ecr describe-images --repository-name "$${repo#*/}" \
+			--image-ids imageTag=$(IMAGE_TAG) --query 'imageDetails[0].imageDigest' \
+			--output text | tr -d '[:space:]'); \
+		cors="$(AWS_CORS_ORIGINS)"; \
+		if [ -z "$$cors" ]; then \
+			cors=$$($(call stack-output,$(FRONTEND_STACK),AllowedOrigins) 2>/dev/null | tr -d '[:space:]'); \
+			case "$$cors" in ""|None) cors='*' ;; esac; \
+		fi; \
+		echo "Deploying AI stack: image=$$repo@$$digest cors=$$cors"; \
+		$(call wait-stack-idle,$(AI_STACK)); \
+		$(call clear-failed-create,$(AI_STACK)); \
+		$(AWS) cloudformation deploy \
+			--stack-name $(AI_STACK) \
+			--template-file infra/ai.yml \
+			--capabilities CAPABILITY_IAM \
+			--no-fail-on-empty-changeset \
+			$(STACK_TAGS) \
+			--parameter-overrides \
+				"ProjectName=$(PROJECT_NAME)" \
+				ImageUri="$$repo@$$digest" \
+				"Architecture=$(AWS_LAMBDA_ARCH)" \
+				"CognitoUserPoolId=$$pool" \
+				"CognitoClientId=$$client" \
+				"AllowedOrigins=$$cors" \
+				"ParserModel=$(or $(PARSER_MODEL),us.anthropic.claude-haiku-4-5-20251001-v1:0)" \
+				"BedrockRegion=$(or $(BEDROCK_REGION),us-east-1)"
+	@echo "Parser URL: $$($(call stack-output,$(AI_STACK),ParserUrl))"
+
 aws-migrate: ## Apply database migrations (invokes the backend function directly)
 	@fn=$$($(call stack-output,$(APP_STACK),FunctionName) | tr -d '[:space:]'); \
 		echo "Migrating ($$fn)"; \
@@ -361,14 +422,17 @@ aws-deploy-frontend: ## Deploy the frontend to S3 + CloudFront, built against th
 	@# Now that the site's URL exists, let Cognito redirect back to it.
 	@$(MAKE) --no-print-directory aws-deploy-auth
 	@api=$$($(call stack-output,$(APP_STACK),ApiUrl) | tr -d '[:space:]'); \
+		parser=$$($(call stack-output,$(AI_STACK),ParserUrl) 2>/dev/null | tr -d '[:space:]'); \
+		case "$$parser" in ""|None) parser="" ;; esac; \
 		auth=$$($(call stack-outputs,$(AUTH_STACK)) | tr -d '\r'); \
 		auth_out() { printf '%s\n' "$$auth" | awk -F '\t' -v k="$$1" '$$1 == k { print $$2 }'; }; \
 		bucket=$$($(call stack-output,$(FRONTEND_STACK),BucketName) | tr -d '[:space:]'); \
 		dist=$$($(call stack-output,$(FRONTEND_STACK),DistributionId) | tr -d '[:space:]'); \
-		echo "Building the static export against $$api"; \
+		echo "Building the static export against $$api (parser: $${parser:-none})"; \
 		rm -rf frontend/out; \
 		docker build --target export --output type=local,dest=frontend/out \
 			--build-arg NEXT_PUBLIC_API_BASE_URL="$$api" \
+			--build-arg NEXT_PUBLIC_PARSER_URL="$$parser" \
 			--build-arg NEXT_PUBLIC_COGNITO_USER_POOL_ID="$$(auth_out UserPoolId)" \
 			--build-arg NEXT_PUBLIC_COGNITO_CLIENT_ID="$$(auth_out UserPoolClientId)" \
 			--build-arg NEXT_PUBLIC_COGNITO_DOMAIN="$$(auth_out HostedDomain)" \
@@ -397,8 +461,8 @@ aws-frontend-url: ## Print the deployed site URL
 
 aws-destroy: ## Delete every stack, including the database and its data
 	$(require-aws-credentials)
-	@printf 'Delete %s, %s, %s and %s? The Aurora cluster and all its data, and every user account, go with them (no snapshot). Type yes: ' \
-		"$(FRONTEND_STACK)" "$(APP_STACK)" "$(AUTH_STACK)" "$(ECR_STACK)"; \
+	@printf 'Delete %s, %s, %s, %s and %s? The Aurora cluster and all its data, and every user account, go with them (no snapshot). Type yes: ' \
+		"$(FRONTEND_STACK)" "$(APP_STACK)" "$(AI_STACK)" "$(AUTH_STACK)" "$(ECR_STACK)"; \
 		read answer; test "$$answer" = "yes" || { echo "Aborted."; exit 1; }
 	@bucket=$$($(call stack-output,$(FRONTEND_STACK),BucketName) 2>/dev/null | tr -d '[:space:]'); \
 		if [ -n "$$bucket" ] && [ "$$bucket" != "None" ]; then \
@@ -407,6 +471,8 @@ aws-destroy: ## Delete every stack, including the database and its data
 		fi
 	-$(AWS) cloudformation delete-stack --stack-name $(FRONTEND_STACK)
 	-$(AWS) cloudformation wait stack-delete-complete --stack-name $(FRONTEND_STACK)
+	-$(AWS) cloudformation delete-stack --stack-name $(AI_STACK)
+	-$(AWS) cloudformation wait stack-delete-complete --stack-name $(AI_STACK)
 	@echo "Deleting $(APP_STACK) — Lambda releases its VPC network interfaces slowly, allow ~20 minutes."
 	$(AWS) cloudformation delete-stack --stack-name $(APP_STACK)
 	$(AWS) cloudformation wait stack-delete-complete --stack-name $(APP_STACK)

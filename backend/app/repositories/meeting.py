@@ -66,6 +66,12 @@ class MeetingRepository:
                 Participant(name=p.name, email=p.email, position=index)
                 for index, p in enumerate(payload.participants)
             ],
+            agenda=payload.agenda.model_dump(mode="json") if getattr(payload, "agenda", None) else None,
+            ai_suggestion=(
+                payload.ai_suggestion.model_dump(mode="json")
+                if getattr(payload, "ai_suggestion", None)
+                else None
+            ),
         )
         self.session.add(meeting)
         await self.session.commit()
@@ -83,6 +89,22 @@ class MeetingRepository:
             Participant(name=p.name, email=p.email, position=index)
             for index, p in enumerate(payload.participants)
         ]
+        if getattr(payload, "agenda", None) is not None:
+            meeting.agenda = payload.agenda.model_dump(mode="json")
+        if getattr(payload, "ai_suggestion", None) is not None:
+            meeting.ai_suggestion = payload.ai_suggestion.model_dump(mode="json")
+        await self.session.commit()
+        await self.session.refresh(meeting)
+        return meeting
+
+    async def update_agenda(
+        self,
+        meeting: Meeting,
+        agenda: dict | None,
+        ai_suggestion: dict | None,
+    ) -> Meeting:
+        meeting.agenda = agenda
+        meeting.ai_suggestion = ai_suggestion
         await self.session.commit()
         await self.session.refresh(meeting)
         return meeting
