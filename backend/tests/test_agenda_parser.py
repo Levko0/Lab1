@@ -16,7 +16,9 @@ from app.ai.agenda import (
 from app.ai.pricing import cost_usd
 
 
-def _make_tool_response(tool_input: dict, tool_id: str = "tool_1", in_tokens: int = 100, out_tokens: int = 50):
+def _make_tool_response(
+    tool_input: dict, tool_id: str = "tool_1", in_tokens: int = 100, out_tokens: int = 50
+):
     block = MagicMock()
     block.type = "tool_use"
     block.name = "record_agenda"
@@ -57,7 +59,9 @@ def test_valid_tool_call():
         ],
         "language": "en",
     }
-    mock_client.messages.create.return_value = _make_tool_response(valid_payload, in_tokens=120, out_tokens=60)
+    mock_client.messages.create.return_value = _make_tool_response(
+        valid_payload, in_tokens=120, out_tokens=60
+    )
 
     today = date(2026, 10, 27)
     tz = ZoneInfo("Europe/Kyiv")
@@ -113,8 +117,20 @@ def test_nullable_fields_and_min_length_validation():
 def test_invalid_output_then_valid_on_retry():
     mock_client = MagicMock()
     # duration_minutes: 0 violates ge=1
-    invalid_payload = {"title": "Retro", "duration_minutes": 0, "items": [], "action_items": [], "language": "en"}
-    valid_payload = {"title": "Retro", "duration_minutes": 45, "items": [{"topic": "What went well", "minutes": 45}], "action_items": [], "language": "en"}
+    invalid_payload = {
+        "title": "Retro",
+        "duration_minutes": 0,
+        "items": [],
+        "action_items": [],
+        "language": "en",
+    }
+    valid_payload = {
+        "title": "Retro",
+        "duration_minutes": 45,
+        "items": [{"topic": "What went well", "minutes": 45}],
+        "action_items": [],
+        "language": "en",
+    }
 
     resp1 = _make_tool_response(invalid_payload, tool_id="tool_1", in_tokens=100, out_tokens=30)
     resp2 = _make_tool_response(valid_payload, tool_id="tool_2", in_tokens=150, out_tokens=40)
@@ -147,7 +163,13 @@ def test_no_tool_call_raises_agenda_parse_error():
 
 def test_invalid_output_retry_fails_raises_agenda_parse_error():
     mock_client = MagicMock()
-    invalid_payload = {"title": "Retro", "duration_minutes": 0, "items": [], "action_items": [], "language": "en"}
+    invalid_payload = {
+        "title": "Retro",
+        "duration_minutes": 0,
+        "items": [],
+        "action_items": [],
+        "language": "en",
+    }
     resp1 = _make_tool_response(invalid_payload, tool_id="tool_1", in_tokens=100, out_tokens=30)
     resp2 = _make_tool_response(invalid_payload, tool_id="tool_2", in_tokens=150, out_tokens=40)
     mock_client.messages.create.side_effect = [resp1, resp2]
@@ -160,7 +182,13 @@ def test_invalid_output_retry_fails_raises_agenda_parse_error():
 
 def test_no_tool_call_on_retry_raises_agenda_parse_error():
     mock_client = MagicMock()
-    invalid_payload = {"title": "Retro", "duration_minutes": 0, "items": [], "action_items": [], "language": "en"}
+    invalid_payload = {
+        "title": "Retro",
+        "duration_minutes": 0,
+        "items": [],
+        "action_items": [],
+        "language": "en",
+    }
     resp1 = _make_tool_response(invalid_payload, tool_id="tool_1", in_tokens=100, out_tokens=30)
     resp2 = _make_text_response("No tool call here", in_tokens=50, out_tokens=20)
     mock_client.messages.create.side_effect = [resp1, resp2]

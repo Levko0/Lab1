@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     )
     bedrock_region: str = Field(
         default="us-east-1",
-        validation_alias=AliasChoices("bedrock_region", "BEDROCK_REGION", "aws_region", "AWS_REGION"),
+        validation_alias=AliasChoices(
+            "bedrock_region", "BEDROCK_REGION", "aws_region", "AWS_REGION"
+        ),
     )
 
     # Cognito user pool whose access tokens the API accepts. Empty pool id means

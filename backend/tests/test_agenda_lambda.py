@@ -77,7 +77,12 @@ def test_text_too_long_returns_413(mock_verifier):
 def test_missing_or_invalid_body(mock_verifier):
     with patch("app.ai.agenda_lambda._get_cached_verifier", return_value=mock_verifier):
         # Missing body
-        res1 = handler({"requestContext": {"http": {"method": "POST"}}, "headers": {"Authorization": "Bearer token"}})
+        res1 = handler(
+            {
+                "requestContext": {"http": {"method": "POST"}},
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert res1["statusCode"] == 400
 
         # Invalid JSON
@@ -102,7 +107,9 @@ def test_successful_parse(mock_verifier, capsys):
 
     with patch("app.ai.agenda_lambda._get_cached_verifier", return_value=mock_verifier):
         with patch("app.ai.agenda_lambda.parse_agenda", return_value=(parsed, usage)):
-            event = _make_event(body={"text": "Короткий синк 30 хв", "today": "2026-10-27", "tz": "Europe/Kyiv"})
+            event = _make_event(
+                body={"text": "Короткий синк 30 хв", "today": "2026-10-27", "tz": "Europe/Kyiv"}
+            )
             res = handler(event)
             assert res["statusCode"] == 200
             data = json.loads(res["body"])
@@ -126,7 +133,9 @@ def test_successful_parse(mock_verifier, capsys):
 
 def test_agenda_parse_error_returns_422(mock_verifier):
     with patch("app.ai.agenda_lambda._get_cached_verifier", return_value=mock_verifier):
-        with patch("app.ai.agenda_lambda.parse_agenda", side_effect=AgendaParseError("Tool call failed")):
+        with patch(
+            "app.ai.agenda_lambda.parse_agenda", side_effect=AgendaParseError("Tool call failed")
+        ):
             event = _make_event(body={"text": "Неструктурований текст"})
             res = handler(event)
             assert res["statusCode"] == 422

@@ -73,11 +73,19 @@ def _find_tool_call(content: Any, tool_name: str) -> tuple[str, dict[str, Any]] 
     if not isinstance(content, (list, tuple)):
         return None
     for block in content:
-        b_type = getattr(block, "type", None) or (block.get("type") if isinstance(block, dict) else None)
-        b_name = getattr(block, "name", None) or (block.get("name") if isinstance(block, dict) else None)
+        b_type = getattr(block, "type", None) or (
+            block.get("type") if isinstance(block, dict) else None
+        )
+        b_name = getattr(block, "name", None) or (
+            block.get("name") if isinstance(block, dict) else None
+        )
         if b_type == "tool_use" and b_name == tool_name:
-            b_id = getattr(block, "id", None) or (block.get("id") if isinstance(block, dict) else "")
-            b_input = getattr(block, "input", None) or (block.get("input") if isinstance(block, dict) else {})
+            b_id = getattr(block, "id", None) or (
+                block.get("id") if isinstance(block, dict) else ""
+            )
+            b_input = getattr(block, "input", None) or (
+                block.get("input") if isinstance(block, dict) else {}
+            )
             return b_id, b_input
     return None
 
@@ -141,7 +149,12 @@ def parse_agenda(
             {
                 "role": "user",
                 "content": [
-                    {"type": "tool_result", "tool_use_id": tool_id, "content": str(first_err), "is_error": True}
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": str(first_err),
+                        "is_error": True,
+                    }
                 ],
             },
         ]

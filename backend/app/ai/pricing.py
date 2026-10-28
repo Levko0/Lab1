@@ -4,7 +4,7 @@ from typing import Any
 
 # Haiku 4.5 list prices in USD per 1,000,000 tokens
 # Prices to verify against AWS Bedrock pricing:
-HAIKU_4_5_INPUT_PER_MILLION: float = 1.00   # Price to verify: $1.00 / 1M input tokens
+HAIKU_4_5_INPUT_PER_MILLION: float = 1.00  # Price to verify: $1.00 / 1M input tokens
 HAIKU_4_5_OUTPUT_PER_MILLION: float = 5.00  # Price to verify: $5.00 / 1M output tokens
 
 
@@ -20,14 +20,14 @@ def cost_usd(model: str, usage: Any) -> float:
     output_rate = HAIKU_4_5_OUTPUT_PER_MILLION
 
     if hasattr(usage, "input_tokens"):
-        input_tokens = getattr(usage, "input_tokens") or 0
+        input_tokens = usage.input_tokens or 0
     elif isinstance(usage, dict):
         input_tokens = usage.get("input_tokens", 0) or 0
     else:
         input_tokens = 0
 
     if hasattr(usage, "output_tokens"):
-        output_tokens = getattr(usage, "output_tokens") or 0
+        output_tokens = usage.output_tokens or 0
     elif isinstance(usage, dict):
         output_tokens = usage.get("output_tokens", 0) or 0
     else:

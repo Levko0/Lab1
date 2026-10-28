@@ -32,7 +32,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.meeting import Meeting, Participant
+from app.models.meeting import Meeting
 
 # "2026-W40" → year=2026, week=40
 _WEEK_RE = re.compile(r"^(\d{4})-W(\d{2})$")
@@ -44,7 +44,7 @@ def report_key(week: str) -> str:
     >>> report_key("2026-W40")
     'reports/2026-W40.csv'
     """
-    _parse_week(week)          # validate before building the key
+    _parse_week(week)  # validate before building the key
     return f"reports/{week}.csv"
 
 
@@ -58,14 +58,10 @@ def _parse_week(week: str) -> tuple[datetime, datetime]:
     """
     m = _WEEK_RE.match(week)
     if not m:
-        raise ValueError(
-            f"Invalid week string {week!r}: expected 'YYYY-Www' (e.g. '2026-W40')."
-        )
+        raise ValueError(f"Invalid week string {week!r}: expected 'YYYY-Www' (e.g. '2026-W40').")
     year, week_num = int(m.group(1)), int(m.group(2))
     if not (1 <= week_num <= 53):
-        raise ValueError(
-            f"Invalid week number {week_num} in {week!r}: must be between 01 and 53."
-        )
+        raise ValueError(f"Invalid week number {week_num} in {week!r}: must be between 01 and 53.")
     tz = settings.tz
     # ISO week: Monday of week_num. %G-%V-%u = ISO year-week-weekday.
     monday = datetime.strptime(f"{year}-W{week_num:02d}-1", "%G-W%V-%u")
@@ -93,12 +89,9 @@ async def _week_stats(
     # ── summary (count + total seconds) ──────────────────────────────────────
     # Extract epoch seconds for each boundary and sum the differences.
     duration_expr = func.sum(
-        func.extract("epoch", Meeting.ends_at)
-        - func.extract("epoch", Meeting.starts_at)
+        func.extract("epoch", Meeting.ends_at) - func.extract("epoch", Meeting.starts_at)
     )
-    row = await session.execute(
-        select(func.count(Meeting.id), duration_expr).where(*overlap)
-    )
+    row = await session.execute(select(func.count(Meeting.id), duration_expr).where(*overlap))
     count, total_seconds = row.one()
     count = count or 0
     total_hours = round(float(total_seconds or 0) / 3600, 4)
@@ -106,8 +99,7 @@ async def _week_stats(
     # ── top-5 longest ─────────────────────────────────────────────────────────
     # Use a subquery so we can order by duration without repeating the expression.
     dur_expr = (
-        func.extract("epoch", Meeting.ends_at)
-        - func.extract("epoch", Meeting.starts_at)
+        func.extract("epoch", Meeting.ends_at) - func.extract("epoch", Meeting.starts_at)
     ).label("dur_seconds")
 
     rows = await session.execute(
@@ -183,8 +175,6 @@ async def build_weekly_report(session: AsyncSession, week: str) -> bytes:
     writer.writerow([])  # blank separator line
     writer.writerow(["name", "starts_at", "duration_hours", "participants"])
     for m in top5:
-        writer.writerow(
-            [m["name"], m["starts_at"], m["duration_hours"], m["participants"]]
-        )
+        writer.writerow([m["name"], m["starts_at"], m["duration_hours"], m["participants"]])
 
     return buf.getvalue().encode("utf-8")

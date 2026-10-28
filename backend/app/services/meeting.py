@@ -67,9 +67,7 @@ class MeetingService:
         meeting = await self.get(meeting_id)
         return await self.repo.update(meeting, payload)
 
-    async def update_agenda(
-        self, meeting_id: uuid.UUID, payload: MeetingAgendaUpdate
-    ) -> Meeting:
+    async def update_agenda(self, meeting_id: uuid.UUID, payload: MeetingAgendaUpdate) -> Meeting:
         meeting = await self.get(meeting_id)
         agenda_data = payload.agenda.model_dump(mode="json") if payload.agenda else None
         suggestion_data = (

@@ -66,7 +66,9 @@ class MeetingRepository:
                 Participant(name=p.name, email=p.email, position=index)
                 for index, p in enumerate(payload.participants)
             ],
-            agenda=payload.agenda.model_dump(mode="json") if getattr(payload, "agenda", None) else None,
+            agenda=payload.agenda.model_dump(mode="json")
+            if getattr(payload, "agenda", None)
+            else None,
             ai_suggestion=(
                 payload.ai_suggestion.model_dump(mode="json")
                 if getattr(payload, "ai_suggestion", None)

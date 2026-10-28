@@ -45,7 +45,9 @@ def _get_header(headers: dict[str, str], name: str) -> str | None:
     return None
 
 
-def _response(status_code: int, body_data: Any, extra_headers: dict[str, str] | None = None) -> dict[str, Any]:
+def _response(
+    status_code: int, body_data: Any, extra_headers: dict[str, str] | None = None
+) -> dict[str, Any]:
     headers = {"Content-Type": "application/json"}
     if extra_headers:
         headers.update(extra_headers)
@@ -139,9 +141,13 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     except AgendaParseError as exc:
         return _response(422, {"detail": str(exc)})
     except RateLimitError:
-        return _response(429, {"detail": "Bedrock rate limit exceeded. Please retry in a few moments."})
+        return _response(
+            429, {"detail": "Bedrock rate limit exceeded. Please retry in a few moments."}
+        )
     except InternalServerError:
-        return _response(503, {"detail": "Bedrock service temporarily unavailable. Please retry later."})
+        return _response(
+            503, {"detail": "Bedrock service temporarily unavailable. Please retry later."}
+        )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
         if code in ("ThrottlingException", "TooManyRequestsException"):
