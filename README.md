@@ -30,12 +30,12 @@ The backend applies migrations on start.
 
 Every page except the login page, and every `/api/v1` endpoint, needs a
 signed-in user, and each user sees only their own meetings. Sign-in is an AWS
-Cognito user pool (`infra/auth.yml`): email + password, and Google when it is
+Cognito user pool (`infra/auth.tf`): email + password, and Google when it is
 configured. Even for local development the pool lives in AWS (it is free at
 this scale):
 
 ```bash
-make aws-deploy-auth   # create/update the user pool; allows http://localhost:$FRONTEND_PORT/
+make infra-plan        # preview infrastructure changes in infra/
 make aws-auth-env      # prints COGNITO_* lines: paste them into .env
 docker compose up -d   # restart so the API and the frontend pick them up
 ```
@@ -115,10 +115,11 @@ Things that are already taken care of, and why:
 
 ## Deploy to AWS
 
-`infra/` holds four CloudFormation templates: `auth.yml` (Cognito sign-in),
-`ecr.yml` (image registry), `backend.yml` (API and database) and `frontend.yml`
-(site). `make` reads `.env`,
-so the `aws-*` targets pick up the credentials and settings from there; `.env` is
+`infra/` holds the infrastructure code:
+- **Terraform (`infra/*.tf`)**: Manages the Cognito User Pool (`auth.tf`), Weekly Reports architecture (`reports.tf`), and Claude Haiku Agenda Parser (`ai.tf`). Plans run locally via `make infra-plan` or automatically on pull requests; applies are executed by HCP Terraform via AWS OIDC upon merge to `main`.
+- **CloudFormation**: Legacy templates for `ecr.yml` (image registry), `backend.yml` (API and database) and `frontend.yml` (site).
+
+`make` reads `.env`, so the `aws-*` targets pick up the credentials and settings from there; `.env` is
 gitignored, so real keys never reach the repository. The AWS CLI runs in the
 `amazon/aws-cli` container, so nothing has to be installed on the host besides
 Docker (`AWS=aws make aws-deploy` uses a local CLI instead, which is noticeably
@@ -359,7 +360,8 @@ sent, so every client shows the same time as the day it was listed under.
 ```
 backend/    FastAPI app (api → services → repositories → models), Alembic, tests
 frontend/   Next.js app, shadcn/ui primitives in components/ui
-infra/      CloudFormation templates behind the aws-* targets
+infra/      Terraform configs (*.tf) for auth, reports, ai; CloudFormation for backend, frontend, ecr
+docs/adr/   Architecture decision records (ADRs)
 docker-compose.yml
 ```
 

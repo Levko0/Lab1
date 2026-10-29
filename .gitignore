@@ -8,3 +8,12 @@ __pycache__/
 node_modules/
 .next/
 out/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+infra/report_mailer.zip
