@@ -1,13 +1,13 @@
 terraform {
   required_version = ">= 1.10"
 
-  # Uncomment and configure with your HCP Terraform organization and workspace:
-  # cloud {
-  #   organization = "ooad-levko"
-  #   workspaces {
-  #     name = "successfulsuccess-dev"
-  #   }
-  # }
+   Uncomment and configure with your HCP Terraform organization and workspace:
+   cloud {
+     organization = "ooad-levko"
+     workspaces {
+       name = "successfulsuccess-dev"
+     }
+   }
 
   required_providers {
     aws = {
