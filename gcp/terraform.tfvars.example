@@ -1,0 +1,7 @@
+project_id      = "spry-levko-2026"
+region          = "us-central1"
+project_name    = "spry"
+db_tier         = "db-f1-micro"
+db_name         = "meetings"
+db_user         = "spry_app"
+container_image = "us-central1-docker.pkg.dev/spry-levko-2026/spry-repo/spry-backend:latest"

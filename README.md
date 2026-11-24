@@ -360,10 +360,73 @@ sent, so every client shows the same time as the day it was listed under.
 ```
 backend/    FastAPI app (api → services → repositories → models), Alembic, tests
 frontend/   Next.js app, shadcn/ui primitives in components/ui
-infra/      Terraform configs (*.tf) for auth, reports, ai; CloudFormation for backend, frontend, ecr
+infra/      Terraform configs (*.tf) for AWS (auth, reports, ai) and legacy CloudFormation
+gcp/        Terraform configs for Google Cloud (Cloud Run, Cloud SQL, Secret Manager, Artifact Registry)
 docs/adr/   Architecture decision records (ADRs)
 docker-compose.yml
 ```
+
+## Google Cloud Platform (GCP) Deployment & Emulation
+
+### 1. What runs on GCP vs. what stays on AWS
+- **Runs on GCP (Core):**
+  - **API:** Google Cloud Run v2 (`gcp/api.tf`), auto-scaling to zero (`min-instances = 0`), listening on `$PORT` (8080).
+  - **Database:** Google Cloud SQL for PostgreSQL (`db-f1-micro`, 10 GB SSD in `us-central1`, `gcp/database.tf`).
+  - **Container Registry:** Google Artifact Registry (`gcp/registry.tf`).
+  - **Secrets:** Google Secret Manager (`spry-db-password`, `gcp/database.tf`).
+  - **Frontend:** Firebase Hosting static export.
+- **Remains on AWS (for now):**
+  - **Auth:** Amazon Cognito User Pool + Google Identity Provider (`infra/auth.tf`).
+  - **AI Agenda Parser:** Amazon Bedrock Claude Haiku 4.5 Lambda URL (`infra/ai.tf`).
+  - **Weekly Reports:** EventBridge Scheduler + Amazon SQS + Report Lambdas + SES (`infra/reports.tf`).
+
+### 2. Local Cloud Run Emulation (No-Cloud-Account Route)
+The backend container is completely detached from the Lambda adapter and honors the Cloud Run runtime contract via `$PORT`:
+
+```bash
+# 1. Start local PostgreSQL
+docker run -d --name spry-postgres --network spry-cloudrun-net -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=meetings -p 5432:5432 postgres:17-alpine
+
+# 2. Build the backend image
+docker build -t spry-backend:cloudrun ./backend
+
+# 3. Run the container as Cloud Run would run it (PORT=8080)
+docker run -d --name spry-api --network spry-cloudrun-net \
+  -e PORT=8080 -p 8080:8080 \
+  -e DEV_MOCK_AUTH=true \
+  -e DATABASE_URL=postgresql+asyncpg://app:app@spry-postgres:5432/meetings \
+  -e CORS_ORIGINS="http://localhost:3000,http://localhost:8080" \
+  -e RUN_MIGRATIONS_ON_START=true \
+  spry-backend:cloudrun
+
+# 4. Verify health check and API
+curl http://localhost:8080/health
+curl http://localhost:8080/api/v1/meetings
+```
+
+### 3. Deploying to GCP via Terraform
+```bash
+cd gcp
+terraform init
+terraform validate
+terraform apply -var="project_id=YOUR_GCP_PROJECT_ID"
+```
+
+### 4. Stopping / Deleting Cloud SQL to Prevent Accidental Billing
+> **Important:** Unlike Aurora Serverless v2, Cloud SQL `db-f1-micro` does not pause when idle and incurs ~$7.67/month while running, plus $1.70/month SSD storage.
+
+- **To temporarily stop Cloud SQL:**
+  ```bash
+  gcloud sql instances patch spry-postgres --activation-policy=NEVER
+  ```
+- **To restart Cloud SQL:**
+  ```bash
+  gcloud sql instances patch spry-postgres --activation-policy=ALWAYS
+  ```
+- **To completely clean up all GCP resources:**
+  ```bash
+  cd gcp && terraform destroy
+  ```
 
 ## Continuous integration
 
